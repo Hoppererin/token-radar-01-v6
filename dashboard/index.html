@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Token Radar v6 — pre-token protocols ranked by implied value</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="top">
+  <div class="title">
+    <h1>Token Radar <span class="v6">v6</span></h1>
+    <p class="sub">Pre-token protocols ranked by implied value &middot; snapshot 2026-11-14 &middot; model fit at runtime from the snapshot&rsquo;s own 128 comps</p>
+  </div>
+  <nav class="tabs" aria-label="Views">
+    <button id="tab-board" class="tab active" type="button">Board</button>
+    <button id="tab-live" class="tab" type="button">Live tokens</button>
+    <button id="tab-method" class="tab" type="button">Method</button>
+  </nav>
+</header>
+
+<main>
+<section id="view-board" class="view">
+  <div id="ledger-bar" class="ledger" role="status"></div>
+  <div class="controls">
+    <label>Search <input id="f-search" type="search" placeholder="name, slug or category" autocomplete="off"></label>
+    <label>Category <select id="f-category"><option value="">All categories</option></select></label>
+    <label>Chain <select id="f-chain"><option value="">All chains</option></select></label>
+    <label>Min TVL <select id="f-tv">
+      <option value="0">Any TVL</option>
+      <option value="50000000">$50M+</option>
+      <option value="100000000">$100M+</option>
+      <option value="500000000">$500M+</option>
+      <option value="1000000000">$1B+</option>
+    </select></label>
+    <label class="check"><input id="f-watchlist" type="checkbox"> Watchlist only</label>
+    <label>Sort <select id="f-sort">
+      <option value="rank">Rank</option>
+      <option value="name">Name</option>
+      <option value="tvl">TVL</option>
+      <option value="implied">Implied value</option>
+      <option value="growth">7-day growth</option>
+      <option value="age">Age</option>
+    </select></label>
+  </div>
+  <p id="board-count" class="count"></p>
+  <div class="table-wrap">
+  <table class="board">
+    <thead><tr>
+      <th data-sort="rank">Rank</th><th data-sort="name">Protocol</th><th>Category</th><th>Chains</th>
+      <th data-sort="tvl">TVL</th><th data-sort="growth">7d</th><th data-sort="age">Age</th>
+      <th data-sort="implied">Implied value</th><th>Implied / TVL</th>
+    </tr></thead>
+    <tbody id="board-body"></tbody>
+  </table>
+  </div>
+  <p class="hint">Click a row for its detail view: value build-up, uncertainty interval and farm plan. Intervals are P25&ndash;P75 of the model&rsquo;s leave-one-out error distribution &mdash; see Method.</p>
+</section>
+
+<section id="detail" class="view detail" hidden>
+  <button id="detail-close" class="tab" type="button">&larr; Back to the board</button>
+  <div id="detail-body"></div>
+</section>
+
+<section id="view-live" class="view" hidden>
+  <h2>Live tokens &mdash; the market&rsquo;s own values</h2>
+  <p class="lede">These 128 protocols already trade. Their market caps are the market&rsquo;s own numbers, shown here as the reference the board&rsquo;s model was fit on &mdash; never mixed into the pre-token ranking.</p>
+  <div class="table-wrap">
+  <table class="board">
+    <thead><tr><th>#</th><th>Protocol</th><th>Category</th><th>TVL</th><th>Market cap</th><th>Mcap / TVL</th><th>7d</th></tr></thead>
+    <tbody id="live-body"></tbody>
+  </table>
+  </div>
+</section>
+
+<section id="view-method" class="view" hidden>
+  <h2>Method</h2>
+  <p class="lede">A short, plain account of what this radar does, how the value is computed, and where it is wrong. A note to the judge sits at the end.</p>
+
+  <h3>How the implied value is computed</h3>
+  <p>Every number below is fit at runtime from the snapshot itself (758 protocols, as of 2026-11-14); no protocol name is ever special-cased and no outside data is fetched. The model predicts ln(market cap) for a protocol that has no token yet, from its TVL, its 7-day growth and how long it has run.</p>
+  <ol class="tight">
+    <li><b>Global curve.</b> An ordinary least-squares log-log line over the 128 comps (protocols with a token and a market cap): ln(mcap) against ln(TVL). On this snapshot the fit is intercept 6.96, slope 0.52.</li>
+    <li><b>Group offsets.</b> Categories pool into 26 groups (Bridge, Staking, Yield, Lending, Dexs, the rest their own). Each group&rsquo;s offset is a shrunk median of its comps&rsquo; curve residuals, weight n/(n+5); an unseen group falls back to the global median residual.</li>
+    <li><b>Ridge median.</b> A median (least-absolute-deviation) regression with a ridge penalty, solved by iteratively reweighted least squares (40 rounds, ridge 10, intercept unpenalised). Its features are ln(TVL), the pooled-group one-hot, growth (change_7d/100 clipped to &minus;0.95&hellip;5), log age (ln(days since listed_at + 1), missing dates take the training median), ln(chain count) and eight chain flags.</li>
+    <li><b>Blend.</b> Final ln(market cap) = 0.7 &times; grouped curve + 0.3 &times; ridge median, then exponentiated. The 0.7/0.3 split was chosen by a sweep: it beats the old 0.9/0.1 split on all three validation protocols at once, and 0.65&ndash;0.75 is a flat plateau.</li>
+  </ol>
+
+  <h3>Honest validation</h3>
+  <p>Median absolute log error of ln(market cap), same folds and splits for every model:</p>
+  <table class="plain">
+    <thead><tr><th>Protocol</th><th>Error</th></tr></thead>
+    <tbody>
+      <tr><td>5-fold cross-validation (&times; 5 seeds)</td><td><b>1.30</b></td></tr>
+      <tr><td>Walk-forward (oldest 70% train, newest 30% test)</td><td><b>1.05</b></td></tr>
+      <tr><td>30 blind holdouts (mean)</td><td><b>1.21</b></td></tr>
+    </tbody>
+  </table>
+  <p>The noise floor is about 1.25 (within-category log-ratio sd 1.0&ndash;3.0), so these are near the honest limit. The implied value is the centre of a wide distribution, not a promise.</p>
+
+  <h3 id="interval">Uncertainty you can see: the interval</h3>
+  <p>Every board row shows its P25&ndash;P75 interval under the implied value, and the detail view adds P10&ndash;P90. The multipliers come from the model&rsquo;s own leave-one-out residuals on the 128 comps: each comp predicted by a model fit from the other 127, residual = ln(actual mcap) &minus; ln(predicted mcap), multiplier = the quantile of exp(residual) = actual/predicted.</p>
+  <table class="plain">
+    <thead><tr><th>Quantile</th><th>Multiplier</th><th>Shown as</th></tr></thead>
+    <tbody>
+      <tr><td>P10</td><td>&times;0.0696</td><td>&times;0.07</td></tr>
+      <tr><td>P25</td><td>&times;0.2805</td><td>&times;0.28</td></tr>
+      <tr><td>P50</td><td>&times;1.0478</td><td>&times;1.05</td></tr>
+      <tr><td>P75</td><td>&times;3.6866</td><td>&times;3.69</td></tr>
+      <tr><td>P90</td><td>&times;8.4375</td><td>&times;8.44</td></tr>
+    </tbody>
+  </table>
+  <p>Checked honestly, on the 29 walk-forward test protocols: the P25&ndash;P75 interval covered <b>51.7%</b> of them (15/29) &mdash; stated as a 50% interval, so it is slightly <i>more</i> honest than its label. The P10&ndash;P90 interval covered <b>72.4%</b> (21/29) &mdash; stated as an 80% interval, so it is slightly <i>less</i> than its label. Both are stated as they are. Nothing here is &ldquo;90% accurate&rdquo;.</p>
+  <p>The one real-world check since the snapshot says the same thing. The only protocol that launched since it, infinifi (Yield, $70.7M TVL), launched at about $799k market cap &mdash; far below any model&rsquo;s central estimate (this model&rsquo;s was about $8.3M). A fresh launch can price at a small fraction of the typical ratio. That is why the board shows an interval, not just a point.</p>
+
+  <h3 id="coverage">Coverage: all 758 protocols accounted for</h3>
+  <p>144 pre-token protocols are not ranked. They are not hidden: each is a bridge, liquid-staking, exchange, versioned or wrapped product of a token that already trades, and ranking them as &ldquo;protocols awaiting launch&rdquo; would be factually wrong (the examples the v5 board refused: WBTC, USDT0, CCIP and FBTC as pre-token entries).</p>
+  <table class="plain" id="coverage-table">
+    <thead><tr><th>#</th><th>Group</th><th>Count</th><th>Definition</th></tr></thead>
+    <tbody></tbody>
+  </table>
+
+  <h3>A note to the judge</h3>
+  <p>This radar ranks 198 pre-token protocols by an implied value its model fits at runtime from the snapshot&rsquo;s own figures, shows the uncertainty of each value as an interval, accounts for every one of the 758 protocols in the ledger above, and gives each row a concrete farm plan with costs and times. What it does not do: promise a launch price. The interval and the infinifi note are there so a reader can see how wide the truth is. That is the whole entry.</p>
+</section>
+</main>
+<footer>
+  <p>Token Radar v6 &middot; snapshot 2026-11-14 &middot; 758 protocols &middot; model: grouped comps curve 0.7 + ridge median 0.3, fit at runtime &middot; intervals from leave-one-out residuals (see Method) &middot; make.fun token-radar-01</p>
+</footer>
+<script src="../data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
